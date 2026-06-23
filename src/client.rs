@@ -155,8 +155,19 @@ impl ApiClient {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "upload.csv".into());
+        self.upload_csv_bytes(path, &filename, bytes, dry_run).await
+    }
+
+    /// Uploads CSV bytes directly (used by the order-import chunker).
+    pub async fn upload_csv_bytes(
+        &self,
+        path: &str,
+        filename: &str,
+        bytes: Vec<u8>,
+        dry_run: bool,
+    ) -> Result<Value> {
         let part = reqwest::multipart::Part::bytes(bytes)
-            .file_name(filename)
+            .file_name(filename.to_string())
             .mime_str("text/csv")
             .map_err(CliError::from)?;
         let form = reqwest::multipart::Form::new().part("file", part);

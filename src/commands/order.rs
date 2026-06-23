@@ -1,13 +1,107 @@
 //! `wms order` — outbound orders (worker+; shipper reads own).
 
+use std::collections::HashMap;
+use std::path::Path;
+
 use serde_json::{Value, json};
 
 use crate::cli::OrderAction;
+use crate::client::ApiClient;
 use crate::commands::item::import_summary;
 use crate::context::RuntimeContext;
 use crate::error::{CliError, Result};
-use crate::output::{Table, render, render_message};
+use crate::output::{OutputFormat, Table, render, render_message};
 use crate::util::{self, field, json_object, parse_loc_line, parse_qty_line, s};
+
+/// Max distinct orders per import request (matches the backend cap; bounded by
+/// the Workers per-request subrequest budget).
+const ORDER_IMPORT_CHUNK: usize = 50;
+
+/// Imports an orders CSV, splitting large files into batches of at most
+/// `ORDER_IMPORT_CHUNK` orders so each request stays within the backend limit.
+/// When applying multiple batches it dry-runs them all first (validate-all → no
+/// partial writes if any row is invalid), then applies, and aggregates the report.
+async fn import_orders_chunked(
+    client: &ApiClient,
+    file: &Path,
+    dry_run: bool,
+    output: OutputFormat,
+) -> Result<()> {
+    let text = std::fs::read_to_string(file)?;
+    let mut lines = text.lines().filter(|l| !l.trim().is_empty());
+    let header = lines
+        .next()
+        .ok_or_else(|| CliError::Usage("CSV is empty".into()))?;
+
+    // Group data rows by order_ref (first column), preserving first-seen order.
+    let mut seen: Vec<String> = Vec::new();
+    let mut groups: HashMap<String, Vec<String>> = HashMap::new();
+    for line in lines {
+        let key = line
+            .split(',')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .trim_matches('"')
+            .to_string();
+        if !groups.contains_key(&key) {
+            seen.push(key.clone());
+        }
+        groups.entry(key).or_default().push(line.to_string());
+    }
+    if seen.is_empty() {
+        return Err(CliError::Usage("CSV has no data rows".into()));
+    }
+
+    // Build one CSV body per batch of <= ORDER_IMPORT_CHUNK distinct refs.
+    let batches: Vec<Vec<u8>> = seen
+        .chunks(ORDER_IMPORT_CHUNK)
+        .map(|refs| {
+            let mut body = String::from(header);
+            body.push('\n');
+            for r in refs {
+                for l in &groups[r] {
+                    body.push_str(l);
+                    body.push('\n');
+                }
+            }
+            body.into_bytes()
+        })
+        .collect();
+
+    let multi = batches.len() > 1;
+    // Validate everything before writing anything (preserve atomic-on-validation).
+    if !dry_run && multi {
+        for b in &batches {
+            client
+                .upload_csv_bytes("/orders:import", "orders.csv", b.clone(), true)
+                .await?;
+        }
+    }
+
+    let (mut created, mut updated) = (0i64, 0i64);
+    let mut last = Value::Null;
+    for b in &batches {
+        let rep = client
+            .upload_csv_bytes("/orders:import", "orders.csv", b.clone(), dry_run)
+            .await?;
+        created += rep.get("created").and_then(Value::as_i64).unwrap_or(0);
+        updated += rep.get("updated").and_then(Value::as_i64).unwrap_or(0);
+        last = rep;
+    }
+
+    if multi {
+        let agg = json!({ "created": created, "updated": updated, "errors": [], "batches": batches.len() });
+        let msg = format!(
+            "{} ({} batches)",
+            import_summary(&agg, dry_run),
+            batches.len()
+        );
+        render_message(output, &msg, agg)
+    } else {
+        render_message(output, &import_summary(&last, dry_run), last)
+    }
+}
 
 pub async fn run(action: OrderAction, ctx: RuntimeContext) -> Result<()> {
     ctx.require_tenant()?;
@@ -63,8 +157,7 @@ pub async fn run(action: OrderAction, ctx: RuntimeContext) -> Result<()> {
             )
         }
         OrderAction::Import { file, dry_run } => {
-            let res = client.upload_csv("/orders:import", &file, dry_run).await?;
-            render_message(ctx.output, &import_summary(&res, dry_run), res)
+            import_orders_chunked(&client, &file, dry_run, ctx.output).await
         }
         OrderAction::Allocate { id } => {
             let v = client
