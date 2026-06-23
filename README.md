@@ -104,7 +104,7 @@ End-to-end test against a real local backend:
 
 ```sh
 # cut a release
-cargo test && git tag v0.1.0 && git push origin v0.1.0
+cargo test && git tag v1.0.0 && git push origin v1.0.0
 ```
 
 Dual-licensed under MIT or Apache-2.0.
