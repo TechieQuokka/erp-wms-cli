@@ -539,6 +539,18 @@ pub enum DevAction {
     },
     /// Runtime bindings + row counts.
     Debug,
+    /// Wipe ALL data and re-seed a bootstrap developer (test env only; guarded).
+    Reset {
+        /// Email for the re-seeded bootstrap developer.
+        #[arg(long)]
+        seed_email: String,
+        /// Password for the re-seeded bootstrap developer.
+        #[arg(long)]
+        seed_password: String,
+        /// Confirmation phrase (must be `RESET`); required for non-interactive runs.
+        #[arg(long)]
+        confirm: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

@@ -61,6 +61,32 @@ pub async fn run(action: DevAction, ctx: RuntimeContext) -> Result<()> {
             let v = client.get("/dev/debug", &[]).await?;
             render_auto(ctx.output, &v)
         }
+        DevAction::Reset {
+            seed_email,
+            seed_password,
+            confirm,
+        } => {
+            // `--confirm RESET` satisfies the guard non-interactively (for automation);
+            // otherwise fall back to an interactive typed-phrase confirmation.
+            if confirm.as_deref() != Some("RESET") {
+                util::confirm_phrase(
+                    &ctx,
+                    "Wipe ALL data and re-seed a bootstrap developer (test env only).",
+                    "RESET",
+                )?;
+            }
+            let v = client
+                .post_action(
+                    "/dev/reset",
+                    &json!({ "confirm": "RESET", "seed": { "email": seed_email, "password": seed_password } }),
+                )
+                .await?;
+            render_message(
+                ctx.output,
+                "Database reset; bootstrap developer re-seeded.",
+                v,
+            )
+        }
     }
 }
 
