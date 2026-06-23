@@ -1,0 +1,32 @@
+[package]
+name = "wms"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Official CLI for the 3PL WMS headless API"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/TechieQuokka/erp-wms-cli"
+readme = "README.md"
+
+[[bin]]
+name = "wms"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.102"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde"] }
+clap = { version = "4.6.1", features = ["derive", "env", "wrap_help"] }
+dirs = "6.0.0"
+reqwest = { version = "0.13.4", default-features = false, features = ["charset", "gzip", "http2", "json", "multipart", "query", "rustls"] }
+rpassword = "7.5.4"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+thiserror = "2.0.18"
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros"] }
+toml = "1.1.2"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
