@@ -63,14 +63,24 @@ assert_eq "no rows written on bad import" "$before" "$(dq_num "SELECT count(*) A
 run_check "dry-run writes nothing" 0 "dry-run" -- "$BIN" --tenant "$T" item import "$FIX/items-$T.csv" --dry-run
 assert_eq "dry-run left counts unchanged" "$before" "$(dq_num "SELECT count(*) AS c FROM items")"
 
-say "Idempotency-Key (retry dedup)"
+say "Idempotency-Key (atomic exactly-once, D1)"
 DTOK="$(raw_login "$BOOT_EMAIL" "$BOOT_PW")"
+cnt_ref() { dq_num "SELECT count(*) AS c FROM orders o JOIN tenants t ON o.tenant_id=t.id WHERE t.code='$T' AND o.ref='$1'"; }
+# (1) retry replays the same order — strongly consistent, no wait needed
 IREF="IDEM-$RUN_ID"; IKEY="idem-$RUN_ID"
 mk_idem() { curl -s -X POST -H "authorization: Bearer $DTOK" -H "x-tenant: $T" -H 'content-type: application/json' -H "idempotency-key: $IKEY" --data "{\"ref\":\"$IREF\",\"lines\":[{\"sku\":\"$RSKU\",\"qty\":1}]}" "$ORIGIN/api/v1/orders"; }
 ID1="$(mk_idem | json_field id)"
-sleep 3   # let the KV cache write propagate (idempotency is KV-eventual)
 ID2="$(mk_idem | json_field id)"
-assert_eq "same key → same order (deduped)" "$ID1" "$ID2"
-assert_eq "only one order exists for the ref" 1 "$(dq_num "SELECT count(*) AS c FROM orders o JOIN tenants t ON o.tenant_id=t.id WHERE t.code='$T' AND o.ref='$IREF'")"
+assert_eq "immediate retry replays same order" "$ID1" "$ID2"
+assert_eq "retry → exactly one order" 1 "$(cnt_ref "$IREF")"
+# (2) two CONCURRENT same-key requests still create exactly one
+CREF="IDEMC-$RUN_ID"; CKEY="idemc-$RUN_ID"
+mk_c() { curl -s -o /dev/null -X POST -H "authorization: Bearer $DTOK" -H "x-tenant: $T" -H 'content-type: application/json' -H "idempotency-key: $CKEY" --data "{\"ref\":\"$CREF\",\"lines\":[{\"sku\":\"$RSKU\",\"qty\":1}]}" "$ORIGIN/api/v1/orders"; }
+mk_c & mk_c & wait
+assert_eq "concurrent same-key → exactly one order" 1 "$(cnt_ref "$CREF")"
+# (3) same key, different payload → 422
+DREF="IDEMD-$RUN_ID"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "authorization: Bearer $DTOK" -H "x-tenant: $T" -H 'content-type: application/json' -H "idempotency-key: $IKEY" --data "{\"ref\":\"$DREF\",\"lines\":[{\"sku\":\"$RSKU\",\"qty\":2}]}" "$ORIGIN/api/v1/orders")
+assert_eq "reused key + different payload → 422" 422 "$code"
 
 summary

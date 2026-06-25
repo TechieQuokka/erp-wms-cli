@@ -58,9 +58,11 @@ backend import grammars.
   ~10–13 D1 ops each) and D1's ~100 bound-parameter limit. The backend now caps a
   single import at 50 orders and chunks its dedup `inArray`; the **CLI splits large
   files into ≤50-order batches** (dry-run-all → apply-all), so big imports work.
-- **Idempotency-Key is implemented** — a repeated `Idempotency-Key` on a create
-  replays the first (encrypted-in-KV) response, so retries don't duplicate. KV is
-  eventually consistent, so the scenario waits briefly before the retry.
+- **Idempotency-Key is implemented (atomic, exactly-once)** — a D1 idempotency table
+  with a UNIQUE key claims the request atomically, so even *concurrent* same-key
+  submissions create exactly one resource; the stored response (AES-256-GCM encrypted)
+  is replayed on retries, an in-flight duplicate gets 409, and a key reused with a
+  different body gets 422. (D1 is strongly consistent — no wait needed.)
 - **Cron storage-snapshot** can't be triggered over HTTP on a deployed worker, so
   `billing-data` is exercised via its data path only (`storageUnitDays` is 0 until
   the daily cron runs).
