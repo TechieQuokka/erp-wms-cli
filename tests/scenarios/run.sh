@@ -4,7 +4,7 @@
 #
 # Unlike tests/integration/run.sh (which boots a local wrangler dev), this drives
 # the `wms` CLI against the live, isolated TEST environment
-# (erp-wms-backend-test.bizcard.workers.dev), resets it to a clean baseline via
+# (erp-wms-backend-test.adamstudio.workers.dev), resets it to a clean baseline via
 # `wms dev reset`, seeds a medium 3PL volume from CSV, and asserts realistic
 # warehouse scenarios. It NEVER targets the real prod worker.
 #
@@ -25,7 +25,7 @@ ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 CLI_DIR="$ROOT/cli"
 BACKEND_DIR="$ROOT/backend"
 
-ORIGIN="${WMS_SCENARIO_ENDPOINT:-https://erp-wms-backend-test.bizcard.workers.dev}"
+ORIGIN="${WMS_SCENARIO_ENDPOINT:-https://erp-wms-backend-test.adamstudio.workers.dev}"
 SECRETS="$BACKEND_DIR/.test-env-secrets"
 read_secret() { [ -f "$SECRETS" ] && grep -E "^$1=" "$SECRETS" | head -1 | cut -d= -f2- || true; }
 BOOT_EMAIL="${WMS_BOOTSTRAP_EMAIL:-$(read_secret BOOTSTRAP_EMAIL)}"
