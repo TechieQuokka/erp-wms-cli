@@ -144,6 +144,16 @@ pub enum AuthAction {
     Whoami,
     /// Print the current token (CI/scripting).
     Token,
+    /// Change your own password. Revokes all other sessions and refreshes the
+    /// stored token for this profile.
+    ChangePassword {
+        /// Current password; prompted securely if omitted.
+        #[arg(long)]
+        current_password: Option<String>,
+        /// New password (min 8 chars); prompted securely (with confirmation) if omitted.
+        #[arg(long)]
+        new_password: Option<String>,
+    },
 }
 
 // ---------------------------------------------------------------- config
