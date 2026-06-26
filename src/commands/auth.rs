@@ -14,6 +14,10 @@ pub async fn run(action: AuthAction, mut ctx: RuntimeContext) -> Result<()> {
         AuthAction::Logout => logout(&mut ctx).await,
         AuthAction::Whoami => whoami(&ctx).await,
         AuthAction::Token => token(&ctx),
+        AuthAction::ChangePassword {
+            current_password,
+            new_password,
+        } => change_password(&mut ctx, current_password, new_password).await,
     }
 }
 
@@ -71,6 +75,54 @@ async fn logout(ctx: &mut RuntimeContext) -> Result<()> {
         ctx.output,
         &format!("Logged out of profile '{profile}'."),
         json!({ "ok": true }),
+    )
+}
+
+async fn change_password(
+    ctx: &mut RuntimeContext,
+    current_password: Option<String>,
+    new_password: Option<String>,
+) -> Result<()> {
+    let current = match current_password {
+        Some(p) => p,
+        None => rpassword::prompt_password("Current password: ")
+            .map_err(|e| CliError::Other(e.into()))?,
+    };
+    let new = match new_password {
+        Some(p) => p,
+        None => {
+            let first = rpassword::prompt_password("New password: ")
+                .map_err(|e| CliError::Other(e.into()))?;
+            let confirm = rpassword::prompt_password("Confirm new password: ")
+                .map_err(|e| CliError::Other(e.into()))?;
+            if first != confirm {
+                return Err(CliError::Other(anyhow::anyhow!("passwords do not match")));
+            }
+            first
+        }
+    };
+
+    let client = ctx.client()?;
+    let resp = client
+        .post_action(
+            "/auth/change-password",
+            &json!({ "currentPassword": current, "newPassword": new }),
+        )
+        .await?;
+    // The server revoked every prior session and issued a fresh token; persist it so
+    // this profile stays authenticated.
+    let token = resp
+        .get("token")
+        .and_then(|t| t.as_str())
+        .ok_or_else(|| CliError::Other(anyhow::anyhow!("change-password response had no token")))?;
+    let profile = ctx.profile.clone();
+    ctx.store.creds_mut(&profile).token = Some(token.to_string());
+    ctx.store.save_credentials()?;
+
+    render_message(
+        ctx.output,
+        &format!("Password changed for profile '{profile}'. Other sessions were revoked."),
+        json!({ "ok": true, "profile": profile }),
     )
 }
 

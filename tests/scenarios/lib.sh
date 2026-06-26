@@ -15,7 +15,7 @@ CLI_DIR="$ROOT/cli"
 BACKEND_DIR="$ROOT/backend"
 BIN="$CLI_DIR/target/debug/wms"
 
-ORIGIN="${WMS_SCENARIO_ENDPOINT:-https://erp-wms-backend-test.bizcard.workers.dev}"
+ORIGIN="${WMS_SCENARIO_ENDPOINT:-https://erp-wms-backend-test.adamstudio.workers.dev}"
 SECRETS_FILE="${WMS_SECRETS_FILE:-$BACKEND_DIR/.test-env-secrets}"
 _rs() { [ -f "$SECRETS_FILE" ] && grep -E "^$1=" "$SECRETS_FILE" | head -1 | cut -d= -f2- || true; }
 BOOT_EMAIL="${WMS_BOOTSTRAP_EMAIL:-$(_rs BOOTSTRAP_EMAIL)}"

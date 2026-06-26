@@ -30,7 +30,7 @@ To target **prod** (a wipe-able prototype here), point at the prod origin and us
 `backend/.test-env-secrets.prod`:
 
 ```bash
-export WMS_SCENARIO_ENDPOINT=https://erp-wms-backend.bizcard.workers.dev
+export WMS_SCENARIO_ENDPOINT=https://erp-wms-backend.adamstudio.workers.dev
 export WMS_SECRETS_FILE=backend/.test-env-secrets.prod
 export WMS_BOOTSTRAP_EMAIL=$(grep ^BOOTSTRAP_EMAIL= "$WMS_SECRETS_FILE" | cut -d= -f2-)
 export WMS_BOOTSTRAP_PASSWORD=$(grep ^BOOTSTRAP_PASSWORD= "$WMS_SECRETS_FILE" | cut -d= -f2-)
